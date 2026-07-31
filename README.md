@@ -6,6 +6,23 @@
 
 自动 TTS 由 AstrBot **内置的 GSV TTS provider**（`gsv_tts_selfhost`）完成，但它只会向本地桥接发送 `text`，**无法传递音色、音量、话速等参数**。本插件把这些参数推送到桥接的 `GET/POST /config` 接口，桥接会将其作为**持久化默认参数**；此后 GSV provider 每次无参调用 `/tts` 时，合成使用的就是这份默认参数 —— 从而达成“在 AIVoice 作为 TTS 源时调整其参数”。
 
+## 架构
+
+```mermaid
+flowchart LR
+    subgraph LOCAL["Windows 本地"]
+        Bridge["AIVoiceBridgeCSharp.exe<br/>HTTP 桥接"]
+        AIVoice["A.I.VOICE Editor<br/>COM 合成"]
+        Bridge --> AIVoice
+    end
+    subgraph VPS["VPS (AstrBot)"]
+        GSV["GSV TTS provider<br/>自动 TTS"]
+        Plugin["astrbot_plugin_aivoicebridge<br/>本插件"]
+    end
+    Plugin -->|"POST /config 推默认参数"| Bridge
+    Bridge -->|"GET /tts?text=… 返回 WAV"| GSV
+```
+
 ## 依赖
 
 - 本地 AIVoiceBridgeCSharp 桥接服务（需支持 `GET/POST /config`，见其 README）
