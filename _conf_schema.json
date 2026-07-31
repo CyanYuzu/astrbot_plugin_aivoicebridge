@@ -1,0 +1,61 @@
+{
+  "api_base": {
+    "description": "桥接服务地址",
+    "hint": "本机桥接经 SSH 反向隧道暴露在 VPS 的该地址, 通常无需修改",
+    "type": "string",
+    "default": "http://127.0.0.1:18765"
+  },
+  "voice": {
+    "description": "默认音色预设名",
+    "hint": "如 紲星 あかり（蕾）、琴葉 茜（Chinese）、Kotonoha Akane (English)",
+    "type": "string",
+    "default": "紲星 あかり（蕾）"
+  },
+  "volume": {
+    "description": "音量",
+    "hint": "范围 0.00 ~ 5.00",
+    "type": "float",
+    "default": 1.0
+  },
+  "speed": {
+    "description": "话速",
+    "hint": "范围 0.50 ~ 4.00",
+    "type": "float",
+    "default": 1.0
+  },
+  "pitch": {
+    "description": "声调高低",
+    "hint": "范围 0.50 ~ 2.00",
+    "type": "float",
+    "default": 1.0
+  },
+  "pitch_range": {
+    "description": "抑扬/强调程度",
+    "hint": "范围 0.00 ~ 2.00",
+    "type": "float",
+    "default": 1.0
+  },
+  "middle_pause": {
+    "description": "句中短停顿(毫秒)",
+    "hint": "范围 80 ~ 500, 仅日语声库生效",
+    "type": "int",
+    "default": 150
+  },
+  "long_pause": {
+    "description": "句中长停顿(毫秒)",
+    "hint": "范围 80 ~ 2000, 仅日语声库生效",
+    "type": "int",
+    "default": 370
+  },
+  "sentence_pause": {
+    "description": "句末停顿(毫秒)",
+    "hint": "范围 0 ~ 10000, 仅日语声库生效",
+    "type": "int",
+    "default": 800
+  },
+  "auto_push": {
+    "description": "插件启动时自动推送配置到桥接",
+    "type": "bool",
+    "default": true
+  }
+}
