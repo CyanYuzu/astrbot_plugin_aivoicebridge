@@ -23,6 +23,23 @@ flowchart LR
     Bridge -->|"GET /tts?text=… 返回 WAV"| GSV
 ```
 
+## 架构
+
+```mermaid
+flowchart LR
+    subgraph LOCAL["Windows 本地"]
+        Bridge["AIVoiceBridgeCSharp.exe<br/>HTTP 桥接"]
+        AIVoice["A.I.VOICE Editor<br/>COM 合成"]
+        Bridge --> AIVoice
+    end
+    subgraph VPS["VPS (AstrBot)"]
+        GSV["GSV TTS provider<br/>自动 TTS"]
+        Plugin["astrbot_plugin_aivoicebridge<br/>本插件"]
+    end
+    Plugin -->|"POST /config 推默认参数"| Bridge
+    Bridge -->|"GET /tts?text=… 返回 WAV"| GSV
+```
+
 ## 依赖
 
 - 本地 AIVoiceBridgeCSharp 桥接服务(需支持 `GET/POST /config`, 见其 README)
