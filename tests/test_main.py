@@ -10,6 +10,7 @@ import types
 from unittest import mock
 
 import httpx
+import pytest
 
 # ---------------------------------------------------------------------------
 # 注入假的 astrbot 模块 (必须在 import main 之前)
@@ -308,3 +309,78 @@ def test_initialize_skips_when_auto_push_false():
     with patcher:
         run(p.initialize())
     assert client.post_calls == []
+
+
+def test_v2_payload_maps_generation_without_legacy_pauses():
+    p = make_plugin({
+        "engine": "aivoice2", "voice": "YuzukiYukari_ns_48", "speed": 1.2,
+        "middle_pause": 150, "long_pause": 370, "sentence_pause": 800,
+        "language": "kansai", "styles": '{"J":0.3,"A":0.2}',
+    })
+    assert p._payload() == {
+        "engine": "aivoice2", "voice": "YuzukiYukari_ns_48", "speed": 1.2,
+        "language": "kansai", "styles": {"J": 0.3, "A": 0.2},
+    }
+
+
+def test_v2_empty_voice_and_styles_clear_previous_defaults():
+    assert make_plugin({"engine": "aivoice2", "voice": ""})._payload() == {
+        "engine": "aivoice2", "voice": None, "language": "standard", "styles": {},
+    }
+
+
+def test_v2_does_not_accept_an_old_bridge_silently_ignoring_engine():
+    p = make_plugin({"engine": "aivoice2"})
+    patcher, _ = _patch_client(_FakeResponse({"voice": "legacy"}))
+    with patcher, pytest.raises(ValueError, match="1.1.0"):
+        run(p._post_config())
+
+
+@pytest.mark.parametrize("styles", ["[]", '{"J":2}', '{"J":true}',
+                                   '{"J":NaN}', '{"J":0.8,"A":0.5}',
+                                   '{"bad":0.2}', "not json"])
+def test_v2_invalid_styles_are_not_pushed(styles):
+    with pytest.raises(ValueError):
+        make_plugin({"engine": "aivoice2", "styles": styles})._payload()
+
+
+def test_v1_does_not_send_v2_fields():
+    payload = make_plugin({"engine": "aivoice", "language": "kansai", "styles": "bad", "middle_pause": 150})._payload()
+    assert payload == {"engine": "aivoice", "middle_pause": 150}
+
+
+@pytest.mark.parametrize("config", [{"engine": "unknown"}, {"engine": "aivoice2", "language": "zh"}])
+def test_invalid_backend_or_dictionary(config):
+    with pytest.raises(ValueError):
+        make_plugin(config)._payload()
+
+
+@pytest.mark.parametrize("action", ["voices", "health", "parameters"])
+def test_discovery_commands_use_real_bridge_routes(action):
+    p = make_plugin({"engine": "aivoice2"})
+    patcher, client = _patch_client(_FakeResponse({"engine": "aivoice2", "voices": [{"id": "voice1"}]}))
+    with patcher:
+        result = collect_results(p.aivoice(_FakeEvent(f"/aivoice {action}")))
+    assert client.get_calls == [f"{main.DEFAULT_API_BASE}/{action}"]
+    assert "aivoice2" in result[0]
+
+
+def test_command_preserves_bridge_error_code_and_message():
+    p = make_plugin({"engine": "aivoice2"})
+    request = httpx.Request("POST", f"{main.DEFAULT_API_BASE}/config")
+    response = httpx.Response(409, request=request, json={"code": "ENGINE_MISMATCH", "error": "Uses aivoice"})
+    patcher, _ = _patch_client(response)
+    with patcher:
+        result = collect_results(p.aivoice(_FakeEvent("/aivoice push")))
+    assert "ENGINE_MISMATCH" in result[0] and "Uses aivoice" in result[0]
+
+
+def test_schema_and_registration_versions_match():
+    import json
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    schema = json.loads((root / "_conf_schema.json").read_text(encoding="utf-8"))
+    assert schema["engine"]["default"] == "aivoice"
+    assert schema["voice"]["default"] == ""
+    assert schema["styles"]["default"] == "{}"
+    assert "version: v1.1.0" in (root / "metadata.yaml").read_text(encoding="utf-8")

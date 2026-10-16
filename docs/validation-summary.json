@@ -1,0 +1,43 @@
+{
+  "real_integration": {
+    "passed": true,
+    "engine": "aivoice2",
+    "voice": "KizunaAkari_ns_48",
+    "commands_tested": [
+      "push",
+      "status",
+      "voices",
+      "health",
+      "parameters"
+    ],
+    "wav_bytes": 280222,
+    "wav_seconds": 2.9185208333333335,
+    "wav_sha256": "309ac5610efc64844882c7b4a90c70c3f2b702b0a82ba089b2e50ca14910fda5",
+    "plugin_http_calls_real": true,
+    "synthesis_real": true,
+    "astrbot_registration_stubbed": true,
+    "remote_bot_message_delivery_tested": false
+  },
+  "date": "2026-10-16",
+  "raw_evidence_published": false,
+  "unit_tests": 33,
+  "version": "1.1.0",
+  "schema": 1,
+  "native_task_parameters": {
+    "voice": "KizunaAkari_ns_48",
+    "language": "standard",
+    "parameters": {
+      "emphasis": 0.8,
+      "pitch": 1.1,
+      "rate": 1.25,
+      "styles": {
+        "K": 0.2
+      },
+      "volume": 0.9
+    },
+    "state": "succeeded",
+    "sha256": "309ac5610efc64844882c7b4a90c70c3f2b702b0a82ba089b2e50ca14910fda5"
+  },
+  "editor_version": "2.13.0",
+  "http_bridge_version": "1.1.0"
+}

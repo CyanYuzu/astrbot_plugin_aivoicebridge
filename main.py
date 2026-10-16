@@ -29,6 +29,7 @@ PARAM_KEYS: tuple[str, ...] = (
     "long_pause",  # 句中长停顿 ms 80 ~ 2000 (仅日语声库)
     "sentence_pause",  # 句末停顿 ms 0 ~ 10000 (仅日语声库)
 )
+PAUSE_KEYS = frozenset({"middle_pause", "long_pause", "sentence_pause"})
 
 DEFAULT_API_BASE = "http://127.0.0.1:18765"
 
@@ -36,8 +37,8 @@ DEFAULT_API_BASE = "http://127.0.0.1:18765"
 @register(
     "astrbot_plugin_aivoicebridge",
     "AIVoiceBridge",
-    "A.I.VOICE 桥接 TTS 参数控制",
-    "1.0.0",
+    "A.I.VOICE / A.I.VOICE2 桥接 TTS 参数控制",
+    "1.1.0",
 )
 class AIVoiceBridgePlugin(Star):
     """AIVoice 桥接参数控制插件。"""
@@ -45,7 +46,9 @@ class AIVoiceBridgePlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig = None):
         super().__init__(context)
         self.config = config if config is not None else {}
-        self.http_timeout = 10
+        self.http_timeout = float(self.config.get("http_timeout", 20))
+        if not 0 < self.http_timeout <= 120:
+            raise ValueError("http_timeout must be in (0, 120] seconds")
 
     # ---- 内部工具 ----
     def _base_url(self) -> str:
@@ -57,12 +60,43 @@ class AIVoiceBridgePlugin(Star):
         """根据插件配置构造推送到桥接 /config 的 JSON, 跳过空值。"""
         cfg = self.config
         payload: dict = {}
+        engine = cfg.get("engine", "aivoice")
+        if engine not in {"aivoice", "aivoice2"}:
+            raise ValueError("engine 必须为 aivoice 或 aivoice2")
+        # Old configurations without engine retain their generation-1 payload.
+        if "engine" in cfg:
+            payload["engine"] = engine
         if cfg.get("voice"):
             payload["voice"] = cfg["voice"]
+        elif engine == "aivoice2":
+            # Clear an old default when switching back to automatic voice selection.
+            payload["voice"] = None
         for key in PARAM_KEYS:
+            if engine == "aivoice2" and key in PAUSE_KEYS:
+                continue
             val = cfg.get(key)
             if val is not None and val != "":
                 payload[key] = val
+        if engine == "aivoice2":
+            payload["engine"] = engine
+            language = cfg.get("language", "standard")
+            if language not in {"standard", "kansai"}:
+                raise ValueError("二代语言词典必须为 standard 或 kansai")
+            payload["language"] = language
+            raw_styles = cfg.get("styles", "{}")
+            styles = json.loads(raw_styles or "{}") if isinstance(raw_styles, str) else raw_styles
+            if not isinstance(styles, dict):
+                raise ValueError("styles 必须为原生风格标签到权重的 JSON 对象")
+            total = 0.0
+            for label, weight in styles.items():
+                if (not isinstance(label, str) or len(label) != 1 or not "A" <= label <= "Z"
+                        or isinstance(weight, bool) or not isinstance(weight, (int, float))
+                        or not 0 <= weight <= 1):
+                    raise ValueError("风格须使用原生 A-Z 标签，权重为 0 到 1 的有限数值")
+                total += weight
+            if total > 1.000001:
+                raise ValueError("风格权重总和不能超过 1")
+            payload["styles"] = styles
         return payload
 
     async def _post_config(self) -> dict:
@@ -70,12 +104,24 @@ class AIVoiceBridgePlugin(Star):
         async with httpx.AsyncClient(timeout=self.http_timeout) as client:
             resp = await client.post(f"{self._base_url()}/config", json=self._payload())
             resp.raise_for_status()
-            return resp.json()
+            result = resp.json()
+            if self.config.get("engine") == "aivoice2" and (
+                not isinstance(result, dict) or result.get("engine") != "aivoice2"
+            ):
+                raise ValueError("二代需要 AIVoiceBridge 1.1.0 及 --engine aivoice2；当前 HTTP 服务未确认二代后端")
+            return result
 
     async def _get_config(self) -> dict:
         """读取桥接当前生效的默认参数。"""
         async with httpx.AsyncClient(timeout=self.http_timeout) as client:
             resp = await client.get(f"{self._base_url()}/config")
+            resp.raise_for_status()
+            return resp.json()
+
+    async def _get_info(self, resource: str) -> dict:
+        """查询实际 HTTP 桥接后端，而不是假定两代接口兼容。"""
+        async with httpx.AsyncClient(timeout=self.http_timeout) as client:
+            resp = await client.get(f"{self._base_url()}/{resource}")
             resp.raise_for_status()
             return resp.json()
 
@@ -95,7 +141,7 @@ class AIVoiceBridgePlugin(Star):
     # ---- 指令 ----
     @filter.command("aivoice")
     async def aivoice(self, event: AstrMessageEvent):
-        """AIVoice 桥接参数控制, 用法: /aivoice [push|status]"""
+        """AIVoice 桥接参数控制: /aivoice [push|status|voices|health|parameters]"""
         args = event.message_str.strip().split()
         # 兼容 message_str 带/不带指令前缀两种情况
         if args and args[0].lstrip("/").lower() == "aivoice":
@@ -111,14 +157,24 @@ class AIVoiceBridgePlugin(Star):
             elif action == "status":
                 result = await self._get_config()
                 yield event.plain_result("桥接当前默认参数:\n" + self._format(result))
+            elif action in {"voices", "health", "parameters"}:
+                result = await self._get_info(action)
+                yield event.plain_result(self._format(result))
             else:
-                yield event.plain_result("用法: /aivoice [push|status]")
+                yield event.plain_result("用法: /aivoice [push|status|voices|health|parameters]")
         except Exception as e:  # noqa: BLE001 - 插件容错, 不允许异常导致崩溃
             logger.error(f"[AIVoiceBridge] 指令执行失败: {e}")
-            yield event.plain_result(f"❌ 操作失败: {e}")
+            detail = str(e)
+            if isinstance(e, httpx.HTTPStatusError) and e.response is not None:
+                try:
+                    body = e.response.json()
+                    detail = f"{body.get('code', e.response.status_code)}: {body.get('error', detail)}"
+                except (ValueError, AttributeError):
+                    pass
+            yield event.plain_result(f"❌ 操作失败: {detail}")
 
     @staticmethod
     def _format(d: dict) -> str:
         """把参数字典格式化为多行文本。"""
-        lines = [f"  {k}: {v}" for k, v in d.items()]
+        lines = [f"  {k}: {json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v}" for k, v in d.items()]
         return "\n".join(lines) if lines else "  (空)"

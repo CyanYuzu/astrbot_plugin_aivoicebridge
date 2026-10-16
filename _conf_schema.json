@@ -1,4 +1,11 @@
 {
+  "engine": {
+    "description": "编辑器后端",
+    "hint": "必须与 HTTP 桥的 --engine 一致。aivoice 为一代，aivoice2 为已安装 DLL API Bridge 的二代；此配置不会启动或切换本地进程。",
+    "type": "string",
+    "options": ["aivoice", "aivoice2"],
+    "default": "aivoice"
+  },
   "api_base": {
     "description": "桥接服务地址",
     "hint": "本机桥接经 SSH 反向隧道暴露在 VPS 的该地址, 通常无需修改",
@@ -6,14 +13,14 @@
     "default": "http://127.0.0.1:18765"
   },
   "voice": {
-    "description": "默认音色预设名",
-    "hint": "如 紲星 あかり（蕾）、琴葉 茜（Chinese）、Kotonoha Akane (English)",
+    "description": "默认音色预设名 / 二代声库 ID",
+    "hint": "一代填预设名；二代执行 /aivoice voices 后填写 id，如 YuzukiYukari_ns_48。留空时二代使用首个可用声库。旧的一代名称需要手动清空或改成二代 ID。",
     "type": "string",
-    "default": "紲星 あかり（蕾）"
+    "default": ""
   },
   "volume": {
     "description": "音量",
-    "hint": "范围 0.00 ~ 5.00",
+    "hint": "一代 0.00~5.00；二代 0.00~2.00",
     "type": "float",
     "default": 1.0
   },
@@ -37,21 +44,39 @@
   },
   "middle_pause": {
     "description": "句中短停顿(毫秒)",
-    "hint": "范围 80 ~ 500, 仅日语声库生效",
+    "hint": "仅一代日语声库，80~500；二代推送时自动排除此项，不提供停顿控制",
     "type": "int",
     "default": 150
   },
   "long_pause": {
     "description": "句中长停顿(毫秒)",
-    "hint": "范围 80 ~ 2000, 仅日语声库生效",
+    "hint": "仅一代日语声库，80~2000；二代推送时自动排除此项",
     "type": "int",
     "default": 370
   },
   "sentence_pause": {
     "description": "句末停顿(毫秒)",
-    "hint": "范围 0 ~ 10000, 仅日语声库生效",
+    "hint": "仅一代日语声库，0~10000；二代推送时自动排除此项",
     "type": "int",
     "default": 800
+  },
+  "language": {
+    "description": "二代语言词典",
+    "hint": "standard=标准日语；kansai=关西词典。这不是中文/英文模型或自动跨语种转换。仅二代发送此项。",
+    "type": "string",
+    "options": ["standard", "kansai"],
+    "default": "standard"
+  },
+  "styles": {
+    "description": "二代原生风格 JSON",
+    "hint": "例如 {\"J\":0.3}。只使用 /aivoice voices 返回的 styles 标签，权重总和不超过1；{} 清空风格。仅二代发送此项。",
+    "type": "string",
+    "default": "{}"
+  },
+  "http_timeout": {
+    "description": "配置与查询 HTTP 超时（秒）",
+    "type": "int",
+    "default": 20
   },
   "auto_push": {
     "description": "插件启动时自动推送配置到桥接",
